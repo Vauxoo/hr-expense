@@ -12,36 +12,6 @@ class HrExpenseSheet(models.Model):
 
     invoice_count = fields.Integer(compute="_compute_invoice_count")
 
-    def _do_create_moves(self):
-        """Don't let super to create any move:
-        - Paid by company: there's already the invoice.
-        - Paid by employee: we create here a journal entry transferring the AP
-          balance from the invoice partner to the employee.
-        """
-        expense_sheets_with_invoices = self.filtered(
-            lambda sheet: all(expense.invoice_id for expense in sheet.expense_line_ids)
-        )
-        res = super(
-            HrExpenseSheet, self - expense_sheets_with_invoices
-        )._do_create_moves()
-        # Create AP transfer entry for expenses paid by employees
-        for expense in expense_sheets_with_invoices.expense_line_ids:
-            if expense.payment_mode == "own_account":
-                move = self.env["account.move"].create(
-                    expense._prepare_own_account_transfer_move_vals()
-                )
-                move.action_post()
-                # reconcile with the invoice
-                ap_lines = expense.invoice_id.line_ids.filtered(
-                    lambda x: x.display_type == "payment_term"
-                )
-                transfer_line = move.line_ids.filtered(
-                    lambda x: x.partner_id
-                    == self.expense_line_ids.invoice_id.partner_id
-                )
-                (ap_lines + transfer_line).reconcile()
-        return res
-
     def action_sheet_move_create(self):
         """Perform extra checks and set proper payment state according linked
         invoices.
