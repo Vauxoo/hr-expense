@@ -114,31 +114,3 @@ class HrExpenseSheet(models.Model):
             action["view_mode"] = "tree,form"
             action["domain"] = [("id", "in", invoice_ids)]
         return action
-
-    @api.depends()
-    def _compute_state(self):
-        """Set proper state according to linked invoices."""
-        sheets_with_invoices = self.filtered(
-            lambda sheet: all(
-                expense.invoice_id and expense.invoice_id.state == "posted"
-                for expense in sheet.expense_line_ids
-            )
-            and sheet.state == sheet.approval_state
-        )
-
-        company_account_sheets = sheets_with_invoices.filtered(
-            lambda sheet: sheet.payment_mode == "company_account"
-        )
-        company_account_sheets.state = "done"
-
-        sheets_with_paid_invoices = (
-            sheets_with_invoices - company_account_sheets
-        ).filtered(
-            lambda sheet: all(
-                expense.invoice_id.payment_state != "not_paid"
-                for expense in sheet.expense_line_ids
-            )
-        )
-        sheets_with_paid_invoices.state = "post"
-
-        return super(HrExpenseSheet, self - sheets_with_invoices)._compute_state()
